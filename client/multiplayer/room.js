@@ -57,6 +57,14 @@ socket.onmessage = function (event) {
         socketOnConnectionAcknowledged(data);
         break;
 
+    case 'countdown-update':
+        const countdownTime = data.countdownTime;
+        console.log("Received countdownTime:", countdownTime);
+        
+        document.querySelector('.face').textContent = Math.floor(countdownTime / 10);
+        document.querySelector('.fraction').textContent = '.' + (countdownTime % 10);
+        break;
+    
     case 'end-of-set':
         socketOnEndOfSet(data);
         break;

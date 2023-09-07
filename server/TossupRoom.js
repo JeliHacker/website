@@ -64,6 +64,8 @@ class TossupRoom {
         };
 
         this.rateLimitExceeded = new Set();
+
+        this.countdown;
     }
 
     connection(socket, userId, username) {
@@ -534,7 +536,45 @@ class TossupRoom {
         });
     }
 
+    sendCountdownUpdate() {
+        const data = {
+            type: 'countdown-update',
+            countdownTime: this.countdownTime
+        };
+        
+        Object.values(this.sockets).forEach(socket => {
+            socket.send(JSON.stringify(data));
+        });
+    }
+
+    startCountdown(countdownTime) {
+        this.countdownTime = countdownTime * 10; // Multiply by 10 to get tenths of a second
+
+        this.countdown = setInterval(() => {
+            if (this.countdownTime === 0) {
+                clearInterval(this.countdown); 
+                this.revealQuestion();
+                this.giveAnswer();
+                return;
+            }
+            // Calculate minutes, seconds, and tenths
+            let minutes = Math.floor(this.countdownTime / 600); // 600 tenths of a second in a minute
+            let seconds = Math.floor((this.countdownTime % 600) / 10); // Remaining seconds
+            let tenths = this.countdownTime % 10;  // Remaining tenths of a second
+            
+            this.countdownTime--;
+            this.sendCountdownUpdate();
+        }, 100); // update every tenth of a second
+      }
+    
+
     async readQuestion(expectedReadTime) {
+        // console.log(`readQuestion() ${this.questionSplit.length} ${this.wordIndex} ${this.tossup.question.length}`);
+        const endOfQuestion = (this.wordIndex === this.questionSplit.length);
+        if (endOfQuestion) {
+            console.log("end of question reached!");
+            this.startCountdown(5);
+        }
         if (Object.keys(this.tossup).length === 0) return;
         if (this.wordIndex >= this.questionSplit.length) {
             return;
@@ -565,6 +605,13 @@ class TossupRoom {
         this.timeoutID = setTimeout(() => {
             this.readQuestion(time + expectedReadTime);
         }, delay);
+    }
+
+    revealAnswer() {
+        this.sendSocketMessage({
+            type: 'reveal-answer',
+            answer: this.tossup.answer,
+        });
     }
 
     revealQuestion() {
