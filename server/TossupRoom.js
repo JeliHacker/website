@@ -165,6 +165,10 @@ class TossupRoom {
             this.buzz(userId);
             break;
 
+        case 'buzz-countdown':
+            console.log(`update-countdown triggered! content: ${message.content} userId: ${userId}`)
+            this.startCountdown(10, message.content);
+
         case 'change-username':
             this.sendSocketMessage({
                 type: 'change-username',
@@ -211,6 +215,7 @@ class TossupRoom {
             break;
 
         case 'give-answer':
+            console.log("LINE 218");
             this.giveAnswer(userId, message.givenAnswer);
             break;
 
@@ -411,6 +416,8 @@ class TossupRoom {
             return;
         }
 
+        this.startCountdown(10);
+
         if (this.buzzedIn) {
             this.sendSocketMessage({
                 type: 'lost-buzzer-race',
@@ -449,8 +456,11 @@ class TossupRoom {
     }
 
     giveAnswer(userId, givenAnswer) {
+        console.log("giveAnswer()");
         if (Object.keys(this.tossup).length === 0)
             return;
+
+        // this.stopCountdown();
 
         this.buzzedIn = null;
         const celerity = this.questionSplit.slice(this.wordIndex).join(' ').length / this.tossup.question.length;
@@ -470,11 +480,13 @@ class TossupRoom {
             Object.values(this.players).forEach(player => { player.tuh++; });
             break;
         case 'reject':
+            console.log(points, celerity, userId);
             this.players[userId].updateStats(points, celerity);
             if (!this.settings.rebuzz && this.buzzes.length === Object.keys(this.sockets).length) {
                 this.revealQuestion();
                 Object.values(this.players).forEach(player => { player.tuh++; });
             } else {
+                console.log("GETTING HERE, READ QUESTION LINE 487");
                 this.readQuestion(Date.now());
             }
             break;
@@ -493,6 +505,13 @@ class TossupRoom {
             tossup: this.tossup,
             perQuestionCelerity: celerity,
         });
+    }
+
+    handleBuzz(userId) {
+        // Handle logic associated with the buzz (e.g., disable other users from buzzing)
+        
+        // Reset the countdown time for answering and restart the countdown
+        this.startCountdown(10);  // example for 10 seconds
     }
 
     async next(userId, type) {
@@ -520,6 +539,16 @@ class TossupRoom {
         this.readQuestion(Date.now());
     }
 
+        notifyClientsToSubmitAnswers() {
+            const data = {
+                type: 'auto-submit-answer'
+            };
+            
+            Object.values(this.sockets).forEach(socket => {
+                socket.send(JSON.stringify(data));
+            });
+        }    
+
     pause(userId) {
         this.paused = !this.paused;
 
@@ -537,6 +566,7 @@ class TossupRoom {
     }
 
     sendCountdownUpdate() {
+        console.log(`sendCountdownUpdate() countdownTime: ${this.countdownTime}`);
         const data = {
             type: 'countdown-update',
             countdownTime: this.countdownTime
@@ -547,14 +577,29 @@ class TossupRoom {
         });
     }
 
-    startCountdown(countdownTime) {
+    startCountdown(countdownTime, context) {
+        console.log(`startCountdown is being called!`);
+        if (context == "endOfQuestion") {
+
+        }
         this.countdownTime = countdownTime * 10; // Multiply by 10 to get tenths of a second
 
         this.countdown = setInterval(() => {
             if (this.countdownTime === 0) {
+                // we need to determine if we should show the answer or not
+                console.log(`this is the context: ${context}, countdown: ${this.countdownTime}`);
                 clearInterval(this.countdown); 
-                this.revealQuestion();
-                this.giveAnswer();
+                // this.countdownTime = 50;
+                console.log(`after clearInterval(), countdown: ${this.countdownTime}`)
+                
+                
+                // Notify all clients to submit their answers
+                if (context == "endOfQuestion") {
+                    this.revealQuestion();
+                } else {
+                    this.notifyClientsToSubmitAnswers();
+                }
+                this.stopCountdown();
                 return;
             }
             // Calculate minutes, seconds, and tenths
@@ -566,6 +611,17 @@ class TossupRoom {
             this.sendCountdownUpdate();
         }, 100); // update every tenth of a second
       }
+
+    stopCountdown() {
+        console.log(`line 605, countdown = ${this.countdown}`);
+        if (this.countdown) {
+            clearInterval(this.countdown);
+            this.countdown = null; // clear the interval reference
+            // this.countdownTime = 50;
+        }
+        // You can also send an update to the clients here if needed, e.g., reset the timer UI.
+        this.sendCountdownUpdate();
+    }
     
 
     async readQuestion(expectedReadTime) {
@@ -573,7 +629,7 @@ class TossupRoom {
         const endOfQuestion = (this.wordIndex === this.questionSplit.length);
         if (endOfQuestion) {
             console.log("end of question reached!");
-            this.startCountdown(5);
+            this.startCountdown(5, "endOfQuestion");
         }
         if (Object.keys(this.tossup).length === 0) return;
         if (this.wordIndex >= this.questionSplit.length) {
@@ -605,6 +661,10 @@ class TossupRoom {
         this.timeoutID = setTimeout(() => {
             this.readQuestion(time + expectedReadTime);
         }, delay);
+    }
+
+    resetCountdown(countdownTime) {
+        this.countdownTime = countdownTime * 10; // Multiply by 10 to get tenths of a second
     }
 
     revealAnswer() {

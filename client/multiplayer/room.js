@@ -33,6 +33,10 @@ const socket = new WebSocket(location.href.replace('http', 'ws'), `${ROOM_NAME}%
 socket.onmessage = function (event) {
     const data = JSON.parse(event.data);
     switch (data.type) {
+    case 'auto-submit-answer':
+        autoSubmitAnswer();
+        break;
+
     case 'buzz':
         socketOnBuzz(data);
         break;
@@ -59,10 +63,13 @@ socket.onmessage = function (event) {
 
     case 'countdown-update':
         const countdownTime = data.countdownTime;
-        console.log("Received countdownTime:", countdownTime);
         
         document.querySelector('.face').textContent = Math.floor(countdownTime / 10);
         document.querySelector('.fraction').textContent = '.' + (countdownTime % 10);
+        if (countdownTime == 0) {
+            document.getElementById('buzz').disabled = true;    
+        }
+
         break;
     
     case 'end-of-set':
@@ -156,6 +163,7 @@ socket.onmessage = function (event) {
         break;
 
     case 'toggle-rebuzz':
+        console.log(data)
         logEvent(data.username, `${data.rebuzz ? 'enabled' : 'disabled'} multiple buzzes (effective next question)`);
         document.getElementById('toggle-rebuzz').checked = data.rebuzz;
         break;
@@ -219,6 +227,11 @@ socket.onclose = function () {
 
 const socketOnBuzz = (message) => {
     logEvent(message.username, 'buzzed');
+    let data = {
+        type: 'buzz-countdown',
+        endOfQuestion: 'Hello, Server!'
+    };
+    socket.send(JSON.stringify(data));
 
     document.getElementById('buzz').disabled = true;
     document.getElementById('pause').disabled = true;
@@ -493,6 +506,18 @@ const PING_INTERVAL_ID = setInterval(() => {
     socket.send(JSON.stringify({ type: 'ping' }));
 }, 45000);
 
+function autoSubmitAnswer() {
+    const answer = document.getElementById('answer-input').value;
+    document.getElementById('answer-input').value = '';
+    document.getElementById('answer-input-group').classList.add('d-none');
+    document.getElementById('answer-input').blur();
+
+    socket.send(JSON.stringify({
+        type: 'give-answer',
+        givenAnswer: answer,
+    }));
+}
+
 
 function createPlayerAccordionItem(player) {
     const { userId, username, powers = 0, tens = 0, negs = 0, tuh = 0, points = 0, celerity = 0 } = player;
@@ -702,6 +727,8 @@ document.getElementById('answer-form').addEventListener('submit', function (even
     document.getElementById('answer-input').value = '';
     document.getElementById('answer-input-group').classList.add('d-none');
     document.getElementById('answer-input').blur();
+
+    console.log("answer-form");
 
     socket.send(JSON.stringify({
         type: 'give-answer',
